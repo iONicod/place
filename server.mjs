@@ -33,15 +33,26 @@ const colors = [
 const size = 256;
 // place(x, y) := place[x + y * size]
 const place = Array(size * size).fill(null);
+
 for (const [colorIndex, colorValue] of colors.entries()) {
   for (let dx = 0; dx < size; dx++) {
     place[dx + colorIndex * size] = colorValue;
   }
 }
 
+function isValidPointData(data) {
+  return data.x >= 0 && data.x < size
+      && data.y >= 0 && data.y < size
+      && colors.includes(data.color)
+}
+
 const app = express();
 
 app.use(express.static(path.join(process.cwd(), "client")));
+
+app.get("/api/colors/", (_, res) => {
+  res.send(colors);
+});
 
 app.get("/*", (_, res) => {
   res.send("Place(holder)");
@@ -51,6 +62,23 @@ const server = app.listen(port);
 
 const wss = new WebSocket.Server({
   noServer: true,
+});
+
+wss.on('connection', function connection(ws) {
+  ws.send(JSON.stringify({type: 'currentPlace', payload: place }));
+  ws.on('message', function incoming(message) {
+    //console.log('received: %s', message);
+    const data = JSON.parse(message);
+    //console.log('data.payload: %s', data.payload);
+    if (data.type === 'setPoint' && isValidPointData(data.payload)) {
+      place[data.payload.y * size + data.payload.x] = data.payload.color;
+      wss.clients.forEach(function each(client) {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(message);
+        }
+      });
+    }
+  })
 });
 
 server.on("upgrade", (req, socket, head) => {
