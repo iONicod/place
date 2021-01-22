@@ -17,11 +17,12 @@ const main = apiKey => {
     else if (data.type === 'setPoint') {
       drawer.put(data.payload.x, data.payload.y, data.payload.color);
     }
+    else if (data.type === 'time') {
+      timeout.next = new Date(data.payload);
+    }
   });
-  //timeout.next = new Date();
   drawer.onClick = (x, y) => {
     ws.send(JSON.stringify({ type: 'setPoint', payload : {x: x, y: y, color: picker.color} }));
-    //drawer.put(x, y, picker.color)
   };
 };
 

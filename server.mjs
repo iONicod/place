@@ -30,6 +30,10 @@ const colors = [
   "#deeed6",
 ];
 
+const timeout = 10;
+
+let nextTime = {};
+
 const size = 256;
 // place(x, y) := place[x + y * size]
 const place = Array(size * size).fill(null);
@@ -64,27 +68,44 @@ const wss = new WebSocket.Server({
   noServer: true,
 });
 
+const wm = new WeakMap();
+
 wss.on('connection', function connection(ws) {
-  ws.send(JSON.stringify({type: 'currentPlace', payload: place }));
+  const key = wm.get(ws);
+  nextTime[`${key}`] = new Date();
+
   ws.on('message', function incoming(message) {
-    //console.log('received: %s', message);
     const data = JSON.parse(message);
-    //console.log('data.payload: %s', data.payload);
     if (data.type === 'setPoint' && isValidPointData(data.payload)) {
-      place[data.payload.y * size + data.payload.x] = data.payload.color;
-      wss.clients.forEach(function each(client) {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(message);
-        }
-      });
+      if(nextTime[`${key}`] < new Date()) {
+        let now = new Date();
+        let nt = new Date(now.valueOf() + timeout * 1000);
+        nextTime[`${key}`] = nt;
+        place[data.payload.y * size + data.payload.x] = data.payload.color;
+        wss.clients.forEach(function each(client) {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(message);
+            ws.send(JSON.stringify({type: 'time', payload: nt.toISOString() }));
+          }
+        });
+      }
+      else
+        ws.send(JSON.stringify({type: 'time', payload: nextTime[`${key}`].toISOString() }));
     }
   })
 });
 
 server.on("upgrade", (req, socket, head) => {
   const url = new URL(req.url, req.headers.origin);
-  console.log(url);
-  wss.handleUpgrade(req, socket, head, (ws) => {
-    wss.emit("connection", ws, req);
-  });
+  const apiKey = url.searchParams.get('apiKey');
+  if (apiKeys.has(apiKey))
+    wss.handleUpgrade(req, socket, head, (ws) => {
+        wm.set(ws, apiKey);
+        wss.emit("connection", ws, req);
+    })
+  else {
+    console.log('Закрываюсьььь')
+    socket.destroy();
+  }
+
 });
